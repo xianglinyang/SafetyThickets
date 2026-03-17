@@ -22,7 +22,12 @@ def setup_logging(
     log_format = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     date_format = "%m/%d/%Y %H:%M:%S"
     
-    # Setup logging to both file and console
+    # Clear any existing handlers to avoid conflicts
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    
+    # Setup logging to both file and console with force=True to override existing config
     logging.basicConfig(
         format=log_format,
         datefmt=date_format,
@@ -30,5 +35,6 @@ def setup_logging(
         handlers=[
             logging.FileHandler(log_file),
             logging.StreamHandler(sys.stdout)
-        ]
+        ],
+        force=True  # This forces reconfiguration even if basicConfig was called before
     )

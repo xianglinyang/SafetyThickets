@@ -27,7 +27,7 @@ from vllm import LLM, SamplingParams
 from src.llm_zoo import load_model
 
 from src.llm_zoo.code_base_models import VLLMModel
-from src.logger.config import setup_logging
+from src.utils.logging_utils import setup_logging
 from src.data_utils.harmful_datasets import HarmfulDataset
 from src.evaluate.prompt_attack import get_attack_fn, __prompt_attacks_methods__
 from src.evaluate.direct_prompts import get_direct_prompting_fn
@@ -292,8 +292,16 @@ class LlamaGuard3ClassifierVLLM(GuardClassifier):
             self.tokenizer.add_special_tokens({"pad_token": "<pad>"})
     
     def _load_model(self):
-        self.model = LLM(model=self.MODEL, dtype=self.torch_dtype, tensor_parallel_size=self.tensor_parallel_size)
-        self.model.set_tokenizer(self.tokenizer)
+        # Note: In newer vLLM versions, tokenizer is loaded automatically with the model
+        self.model = LLM(
+            model=self.MODEL, 
+            dtype=self.torch_dtype, 
+            tensor_parallel_size=self.tensor_parallel_size,
+            trust_remote_code=True
+        )
+        # Remove the deprecated set_tokenizer call
+        # self.model.set_tokenizer(self.tokenizer)  # This method no longer exists in newer vLLM
+        
         self.cls_params = SamplingParams(temperature=0.0, max_tokens=50)
     
     def moderate(self, question, response):
@@ -459,8 +467,17 @@ Answer: [/INST]''',
             self.tokenizer.add_special_tokens({"pad_token": "<pad>"})
     
     def _load_model(self):
-        self.model = LLM(model=self.MODEL, dtype=self.torch_dtype, tensor_parallel_size=self.tensor_parallel_size)
-        self.model.set_tokenizer(self.tokenizer)
+        # Note: In newer vLLM versions, tokenizer is loaded automatically with the model
+        # and set_tokenizer() method has been removed
+        self.model = LLM(
+            model=self.MODEL, 
+            dtype=self.torch_dtype, 
+            tensor_parallel_size=self.tensor_parallel_size,
+            trust_remote_code=True
+        )
+        # Remove the deprecated set_tokenizer call
+        # self.model.set_tokenizer(self.tokenizer)  # This method no longer exists in newer vLLM
+        
         self.cls_params = SamplingParams(temperature=0.0, max_tokens=1, truncate_prompt_tokens=2000)
     
     def moderate(self, question, response):
@@ -479,12 +496,11 @@ Answer: [/INST]''',
         try:
             outputs = self.model.generate(inputs, self.cls_params)
             preds = [o.outputs[0].text for o in outputs]
+            return preds
         except Exception as e:
-            logger.error(f"Failed to generate predictions for batch {i//batch_size}: {e}")
+            logger.error(f"Failed to generate predictions for harmbench batch: {e}")
             # Return default safe predictions if generation fails
-            all_predictions.extend(["No"] * len(inputs))
-        
-        return preds
+            return ["No"] * len(inputs)
     
     # def batch_moderate(self, questions: List[str], responses: List[str], batch_size: int = 50) -> List[str]:
     #     all_predictions = []

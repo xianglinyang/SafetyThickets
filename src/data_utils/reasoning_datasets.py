@@ -395,17 +395,49 @@ def answer_cleansing_with_regex(dataset, llm_answer):
     elif dataset in ("object_tracking"):
         pred = re.findall(r'A|B|C', pred)
     elif dataset == "mmlu" or dataset == "arc-c" or dataset == "arc-e" or dataset == "MMLU-STEM":
-        pred = re.findall(r'A|B|C|D', pred)
+        # More intelligent extraction for multiple choice questions
+        # Ordered by priority - try most specific patterns first
+        answer_patterns = [
+            r'([A-D])\s+is\s+(?:correct|right|definitely right|the (?:correct )?answer)',  # "A is definitely right"
+            r'(?:the )?(?:correct )?answer is (?:clearly )?(?:\(?([A-D])\)?)',  # "The answer is A" or "answer is (B)"
+            r'(?:the )?(?:correct )?choice is (?:\(?([A-D])\)?)',  # "The correct choice is A"
+            r'(?:the )?solution is (?:\(?([A-D])\)?)',  # "The solution is B"
+            r'\b(?:final\s+)?answer\s*:\s*(?:\(?([A-D])\)?)',  # "Answer: A" with word boundaries
+            r'\bfinal\s+answer\s+(?:\(?([A-D])\)?)',  # "Final answer C" with word boundaries
+            r'^\s*([A-D])\s*[.)]',  # Answer at the beginning like "A." or "A)"
+            r'\(([A-D])\)(?:\s+is|\s+are|\s*$)',  # "(A) is" or "(A)" at end  
+            r'(?:the )?(?:correct )?option is (?:\(?([A-D])\)?)',  # "The correct option is A"
+            r'([A-D])\s+is\s+the\s+best\s+answer',  # "D is the best answer"
+            r'(?:the )?best (?:choice|answer) is (?:\(?([A-D])\)?)',  # "The best choice is D"
+            r'clearly\s+([A-D])',  # "This is clearly A"  
+            r'(?:I )?(?:think )?(?:the answer )?should be\s+([A-D])',  # "I think the answer should be B"
+            r'(?:I )?(?:will )?(?:I\'ll )?(?:go with|choose)\s+([A-D])',  # "I choose A" or "I'll go with B"
+            r'but\s+I\s+choose\s+([A-D])',  # "but I choose A"
+        ]
+        
+        pred_match = None
+        for pattern in answer_patterns:
+            matches = re.findall(pattern, pred, re.IGNORECASE)
+            if matches:
+                pred_match = matches[0].upper()
+                break
+        
+        # If no patterns match, fall back to finding the last A/B/C/D (often the final answer)
+        if pred_match is None:
+            all_matches = re.findall(r'[A-D]', pred.upper())
+            pred_match = all_matches[-1] if all_matches else "[INVALID]"
+        
+        pred = [pred_match]
     elif dataset in ("gsm8k", "multiarith", "svamp"):
         pred = pred.replace(",", "")
         pred = [s for s in re.findall(r'-?\d+\.?\d*', pred)]
     elif dataset in ("strategyqa", "coin_flip"):
         pred = pred.lower()
-        pred = re.sub("\"|\'|\n|\.|\s|\:|\,"," ", pred)
+        pred = re.sub(r"\"|\'|\n|\.|\s|\:|\,", " ", pred)
         pred = pred.split(" ")
         pred = [i for i in pred if i in ("yes", "no")]
     elif dataset == "last_letters":
-        pred = re.sub("\"|\'|\n|\.|\s","", pred)
+        pred = re.sub(r"\"|\'|\n|\.|\s", "", pred)
         pred = [pred]
     else:
         raise ValueError("dataset is not properly defined ...")
